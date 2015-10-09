@@ -1,0 +1,1069 @@
+;Create the Main Window
+Local wnd = CreateWindow("Window", ((GraphicsWidth()/2) - 320), ((GraphicsHeight()/2) - 240), 640, 480, 0, 5)
+
+;Create Menu
+Local menu = CreateMenu("File", 0, WindowMenu(wnd))
+CreateMenu("About", 1, menu)
+CreateMenu("Exit", 2, menu)
+UpdateWindowMenu(wnd)
+
+;Project Path
+Global pPath$ = ""
+
+;TEMP
+ChangeDir("C:\Program Files (x86)\Solstar Games\Realm Crafter 1\Projects\")
+
+;Create Buttons
+Local btn_ScanZone = CreateButton("Scan Single Zone", 510, 15, 110, 30, wnd)
+Local btn_ScanAllZones = CreateButton("Scan All Zones", 510, 60, 110, 30, wnd)
+Local btn_ScanEmitter = CreateButton("Scan Single Emitter", 510, 105, 110, 30, wnd)
+Local btn_ScanAllEmitters = CreateButton("Scan All Emitters", 510, 150, 110, 30, wnd)
+Local btn_ScanMusic = CreateButton("Scan Music/Sounds", 510, 195, 110, 30, wnd)
+Local btn_ScanScript = CreateButton("Scan Single Script", 510, 240, 110, 30, wnd)
+Local btn_ScanAllScripts = CreateButton("Scan All Scripts", 510, 285, 110, 30, wnd)
+Local btn_ScanEssentialFiles = CreateButton("Scan Essential Files", 510, 330, 110, 30, wnd)
+Local btn_FullScan = CreateButton("Full Project Scan", 185, 375, 165, 45, wnd)
+Local btn_ProjectPath = CreateButton("Choose Project Path", 5, 375, 165, 45, wnd)
+Global prog_Progress = CreateProgBar(360, 386, 260, 25, wnd)
+
+;Setup Debug Log
+Global txt_debug = CreateTextArea(5, 5, 480, 355, wnd)
+;SendMessage QueryObject(txt_debug,1),$CF,1,0 ;use user32.dll to make read only
+Global lineNum% = 0
+
+;Errors
+Global fileErrors% = 0
+Global totalErrors% = 0
+
+
+;Main Event Loop
+Repeat
+
+	;Wait for a GUI Event to happen
+	Local event = WaitEvent(5)
+	
+	;User has clicked something
+	Select event
+	
+		;A gadget has been pressed, determine which one and what to do
+		Case $401
+			Local gadget = EventSource()
+			Select gadget
+			
+				;Choose Project Path
+				Case btn_ProjectPath
+					
+					;Set Project Path
+					pPath$ = RequestDir("Select a Project Path", CurrentDir())
+					Message("Project Path Set To: " + pPath$, 1)
+					Message("", 1)
+			
+				;Scan Zone Button Pressed
+				Case btn_ScanZone
+				
+					If pPath$ <> ""
+						;Clear debug log
+						;SetGadgetText(txt_debug, "")
+						;lineNum% = 0
+						
+						;Have user choose file to open and scan				
+						Local file$ = StripFilePath(RequestFile("Select A Zone To Scan", "dat", False, pPath$ + "\.dat"))
+						If file$ <> ""
+							Local clientFile$ = pPath$ + "\Data\Areas\" + file$
+							Local serverFile$ = pPath$ + "\Data\Server Data\Areas\" + file$
+							ScanClientZone(clientFile$)
+							ScanServerZone(serverFile$)
+						EndIf
+					Else
+						Notify "Please set the Project Path first."
+					EndIf
+					
+				;Scan All Zones Button Pressed
+				Case btn_ScanAllZones
+					
+					If pPath$ <> ""
+						Local clientFolderPath$ = pPath + "\Data\Areas\"
+						myDir$ = ReadDir(clientFolderPath$)
+						Repeat
+							Local fil$ = NextFile$(myDir$)
+							If fil$ = "" Then Exit
+							If FileType(clientFolderPath$ + fil$) = 1
+								Local clientFil$ = pPath$ + "\Data\Areas\" + fil$
+								Local serverFil$ = pPath$ + "\Data\Server Data\Areas\" + fil$
+								ScanClientZone(clientFil$)
+								ScanServerZone(serverFil$)
+							EndIf
+						Forever
+						CloseDir(myDir$)		
+					Else
+						Notify "Please set the Project Path first."
+
+					EndIf
+
+					
+			End Select
+		
+		
+		;The 'X' has been pressed, close program
+		Case $803
+			Local window_closed = EventSource()
+			Select window_closed
+				Case wnd
+					FreeGadget(wnd)
+					End()
+			End Select
+			
+	End Select
+		
+Forever
+
+;Scans a Single Client Zone File
+Function ScanClientZone(file$)
+
+	;Set Errors to 0
+	fileErrors% = 0
+	
+	;Starting Scan
+	Message("", 1)
+	Message("TASK: Scan Client Area Data: " + StripFilePath(file$), 1)
+	Message("Starting Scan: " + file$, 1)
+	
+	;Attempt to read Zone file
+	F = ReadFile(file$)
+	If F = 0
+		Message("Could Not Open Zone: " + file$, 2)
+	Else
+		Message("Successfully Opened Zone: " + file$, 1)
+	EndIf
+	
+	;Read in Loading Screen texture
+	LoadingTexID = ReadShort(F)
+	Message("Attempting to read Loading Screen Texture...", 1)
+	
+	;Loading Screen Texture
+	If LoadingTexID > -1 And LoadingTexID < 65535
+		CheckTexture(LoadingTexID)
+	Else
+		Message("No Loading Texture has been set in GUE. Skipping.", 1)
+	EndIf
+	
+	;Read in Loading Music
+	LoadingMusicID = ReadShort(F)
+	Message("Attempting to read Loading Screen Music...", 1)
+	
+	;Music
+	If LoadingMusicID > -1 And LoadingMusicID < 65535 
+		CheckMusic(LoadingMusicID)
+	Else
+		Message("No Loading Music has been set in GUE. Skipping.", 1)
+	EndIf
+	
+	;Read in Sky Texture
+	SkyTexID = ReadShort(F)
+	Message("Attempting to read Sky Texture...", 1)
+	
+	;Sky Texture
+	If SkyTexID > -1 And SkyTexID < 65535
+		CheckTexture(SkyTexID)
+	Else
+		Message("No Sky Texture has been set in GUE. Skipping.", 1)
+	EndIf
+	
+	;Read in Cloud Texture
+	CloudTexID = ReadShort(F)
+	Message("Attempting to read Cloud Texture...", 1)
+	
+	;Cloud Texture
+	If CloudTexID > -1 And CloudTexID < 65535
+		CheckTexture(CloudTexID)
+	Else
+		Message("No Cloud Texture has been set in GUE. Skipping.", 1)
+	EndIf
+	
+	;Read in Storm Texture
+	StormCloudTexID = ReadShort(F) 
+	Message("Attempting to read Storm Texture...", 1)
+	
+	;Storm Texture
+	If StormCloudTexID > -1 And StormCloudTexID < 65535
+		CheckTexture(StormCloudTexID)
+	Else
+		Message("No Storm Texture has been set in GUE. Skipping.", 1)
+	EndIf
+	
+	;Read in Stars Texture
+	StarsTexID = ReadShort(F) 
+	Message("Attempting to read Stars Texture...", 1)
+	
+	;Stars Texture
+	If StarsTexID > -1 And StarsTexID < 65535
+		CheckTexture(StarsTexID)
+	Else
+		Message("No Stars Texture has been set in GUE. Skipping.", 1)
+	EndIf
+	
+	;Fog Values
+	FogR = ReadByte(F)
+	If FogR > 255 Or FogR < 0 Then Message("Fog Red Value is out of range (0-255): " + FogR, 2)
+	FogG = ReadByte(F)
+	If FogG > 255 Or FogG < 0 Then Message("Fog Green Value is out of range (0-255): " + FogR, 2)
+	FogB = ReadByte(F)
+	If FogB > 255 Or FogB < 0 Then Message("Fog Blue Value is out of range (0-255): " + FogR, 2)
+	FogNear# = ReadFloat#(F)
+	FogFar# = ReadFloat#(F)
+	
+	;Read in Map Texture
+	MapTexID = ReadShort(F)
+	Message("Attempting to read Map Texture...", 1)
+	
+	;Map Texture
+	If MapTexID > -1 And MapTexID < 65535
+		CheckTexture(MapTexID)
+	Else
+		Message("No Map Texture has been set in GUE. Skipping.", 1)
+	EndIf
+	
+	;Miscellenous Environment Values
+	Outdoors = ReadByte(F)
+	If Outdoors <> 0 And Outdoors <> 1 Then Message("Outdoors Value is out of range (0 or 1): " + Outdoors, 2)
+	AmbientR = ReadByte(F)
+	If AmbientR > 255 Or AmbientR < 0 Then Message("Ambient Red Value is out of range (0-255): " + AmbientR, 2)
+	AmbientG = ReadByte(F)
+	If AmbientG > 255 Or AmbientG < 0 Then Message("Ambient Green Value is out of range (0-255): " + AmbientG, 2)
+	AmbientB = ReadByte(F)
+	If AmbientB > 255 Or AmbientB < 0 Then Message("Ambient Blue Value is out of range (0-255): " + AmbientB, 2)
+	DefaultLightPitch# = ReadFloat#(F)
+	If DefaultLightPitch# > 90 Or DefaultLightPitch# < -90 Then Message("Default Light Pitch Value is out of range (-90-90): " + DefaultLightPitch#, 2)
+	DefaultLightYaw#  = ReadFloat#(F)
+	If DefaultLightYaw# > 180 Or DefaultLightYaw# < -180 Then Message("Default Light Yaw Value is out of range (-180-180): " + DefaultLightYaw#, 2)
+	SlopeRestrict#   = ReadFloat#(F)
+	If SlopeRestrict# > 1 Or SlopeRestrict# < 0 Then Message("Slope Restriction Value is out of range (0-1): " + SlopeRestrict#, 2)
+
+	;Update Progress Bar
+	updatePBarZone(1)
+	
+	;Scenery
+	Sceneries = ReadShort(F)
+	Message("Number of Scenery Objects to read: " + Sceneries, 1)
+	
+	;Loop through Scenery Objects
+	For i = 1 To Sceneries
+	
+		;Check to see if mesh can be located
+		MeshID = ReadShort(F)
+		MeshName$ = CheckMesh(MeshID)
+		 
+		;Read X, Y, Z, pitch, yaw, roll, scaleX, scaleY, scaleZ (not important to scan)
+		For n = 1 To 9
+			ReadFloat(F)
+		Next
+		
+		;Read Animation mode (not important to scan)
+		ReadByte(F)
+		
+		;Scenery is ownable
+		ownable = ReadByte(F)
+		If ownable <> 0 Then Message("Warning! Scenery Mesh is checked as ownable: " + MeshName$, 2)
+		
+		;Mesh Re-Texture
+		tex = ReadShort(F)
+		If tex > -1 And tex < 65535
+			Message("Attempting to read Re-Texture for Mesh: " + MeshName$, 1)
+			CheckTexture(tex)
+		EndIf
+		
+		;Stop rain particles flag (not important to scan)
+		ReadByte(F)
+
+		;Collision Mode (not important to scan)
+		ReadByte(F)
+		
+		;LightMap Texture (ERROR CHECK LEFT OUT)
+		lTex$ = ReadString(F)
+		If lTex$ <> ""
+			Message("Attempting to read Lightmap Texture for mesh: " + pPath$ + "\Data\Textures\Lightmaps\" + lTex$, 1)
+			If FileType(pPath$ + "\Data\Textures\Lightmaps\" + lTex$) <> 1 
+				Message("Could Not Locate Lightmap Texture: " + pPath$ + "\Data\Textures\Lightmaps\" + lTex$, 2)
+			ElseIf FileType(pPath$ + "\Data\Textures\Lightmaps\" + lTex$) = 1
+				Message("Lightmap Texture Successfully Located: " + pPath$ + "\Data\Textures\Lightmaps\" + lTex$, 1)
+			EndIf
+		EndIf
+		
+		;RCTE reserved (ERROR CHECK LEFT OUT)
+		ReadString(F)
+		
+	Next
+	
+	;Update Progress Bar
+	updatePBarZone(2)
+	
+	;Water
+	Waters = ReadShort(F)
+	Message("Number of Water Objects to read: " + Waters, 1)
+	
+	;Loop through Water Objects
+	For i = 1 To Waters
+		
+		;Read Water Texture
+		texID = ReadShort(F)
+		If texID > -1 And texID < 65535
+			CheckTexture(texID)
+		Else
+			Message("No Water Texture has been set in GUE. Skipping.", 1)
+		EndIf
+		
+		;Read scale, X, Y, Z, scaleX, scaleZ (not important to scan)
+		For n = 1 To 6
+			ReadFloat(F)
+		Next
+		
+		;Misc Water Values
+		waterR = ReadByte(F)
+		If waterR > 255 Or waterR < 0 Then Message("Water Red Value is out of range (0-255): " + waterR, 2)
+		waterG = ReadByte(F)
+		If waterG > 255 Or waterG < 0 Then Message("Water Green Value is out of range (0-255): " + waterG, 2)
+		waterB = ReadByte(F)
+		If waterB > 255 Or waterB < 0 Then Message("Water Blue Value is out of range (0-255): " + waterB, 2)
+		waterO = ReadByte(F)
+		If waterO > 255 Or waterO < 0 Then Message("Water Opacity Value is out of range (0-255): " + waterO, 2)
+		
+	Next
+	
+	;Update Progress Bar
+	updatePBarZone(3)
+	
+	;Collision Boxes (not important to scan)
+	Collisions = ReadShort(F)
+
+	;Loop through all Collision Box Objects
+	For i = 1 To Collisions
+	
+		;Read X, Y, Z, pitch, yaw, roll, scaleX, scaleY, scaleZ
+		For n = 1 To 9
+			ReadFloat(F)
+		Next
+		
+	Next
+	
+	;Update Progress Bar
+	updatePBarZone(4)
+	
+	;Emitters
+	Emitters = ReadShort(F)
+	Message("Number of Emitter Objects to read: " + Emitters, 1)
+	
+	;Loop through all Emitter Objects
+	For i = 1 To Emitters
+	
+		;Emitter Name
+		Name$ = ReadString(F)
+		
+		;Check to see if emitter file exists
+		Message("Attempting to read Emitter: " + pPath$ + "\Data\Emitter Configs\" + Name$ + ".rpc", 1)
+		If FileType(pPath$ + "\Data\Emitter Configs\" + Name$ + ".rpc") <> 1
+			Message("Could Not Locate Emitter: " + pPath$ + "\Data\Emitter Configs\" + Name$ + ".rpc", 2)
+		ElseIf FileType(pPath$ + "\Data\Emitter Configs\" + Name$ + ".rpc") = 1
+			Message("Emitter Successfully Located: " + pPath$ + "\Data\Emitter Configs\" + Name$ + ".rpc", 1)
+		EndIf
+		
+		;Texture
+		tex = ReadShort(F)
+		Message("Attempting to read Texture for Emitter: " + pPath$ + "\Data\Emitter Configs\" + Name$ + ".rpc", 1)
+		
+		;Check to see if emitter texture exists
+		If tex > -1 And tex < 65535
+			CheckTexture(tex)
+		Else
+			Message("No Emitter Texture has been set in GUE. Skipping.", 1)
+		EndIf
+		
+		;Read X, Y, Z, pitch, yaw, roll
+		For n = 1 To 6
+			ReadFloat(F)
+		Next
+		
+	Next
+	
+	;Update Progress Bar
+	updatePBarZone(5)
+	
+	;Terrains
+	Terrains = ReadShort(F)
+	Message("Number of Terrain Objects to read: " + Terrains, 1)
+
+	;Loop through all Terrain Objects
+	For i = 1 To Terrains
+		
+		;Read in Base Texture
+		baseTexID  = ReadShort(F)
+		Message("Attempting to read Base Texture for Terrain: " + i, 1)
+		
+		;Base Texture
+		If baseTexID > -1 And baseTexID < 65535
+			CheckTexture(baseTexID)
+		Else
+			Message("No Base Texture has been set in GUE. Skipping.", 1)
+		EndIf
+		
+		;Read in Detail Texture
+		detailTexID  = ReadShort(F)
+		Message("Attempting to read Detail Texture for Terrain: " + i, 1)
+		
+		;Detail Texture
+		If detailTexID > -1 And detailTexID < 65535
+			CheckTexture(detailTexID)
+		Else
+			Message("No Detail Texture has been set in GUE. Skipping.", 1)
+		EndIf
+		
+		;Grid Size
+		gridSize = ReadInt(F)
+		
+		;Loop through each grid square
+		For n = 1 To gridSize + 1
+			For m = 1 To gridSize + 1
+				ReadFloat(F)
+			Next
+		Next
+		
+		;Read X, Y, Z, pitch, yaw, roll, scaleX, scaleY, scaleZ, detailTextureScale
+		For l = 1 To 10
+			ReadFloat(F)
+		Next
+		
+		;Read Terrain Detail Level
+		ReadInt(F)
+		
+		;Read Morphing Flag
+		ReadByte(F)
+		
+		;Read Shading Flag
+		ReadByte(F)
+		
+	Next
+	
+	;Update Progress Bar
+	updatePBarZone(6)
+	
+	;Sounds
+	Sounds = ReadShort(F)
+	Message("Number of Sound Objects to read: " + Sounds, 1)
+
+	;Loop through all Sound Objects
+	For i = 1 To Sounds
+		
+		;Read X, Y, Z, radius
+		For n = 1 To 4
+			ReadFloat(F)
+		Next
+		
+		;Read in Sound
+		soundID = ReadShort(F)
+		Message("Attempting to read Sound: " + i, 1)
+		
+		;Sound
+		If soundID > -1 And soundID < 65535 
+			CheckSound(soundID)
+		Else
+			Message("No Sound has been set in GUE. Skipping.", 1)
+		EndIf
+		
+		;Read in Music
+		musicID = ReadShort(F)
+		Message("Attempting to read Music: " + i, 1)
+		
+		;Music
+		If musicID > -1 And musicID < 65535 
+			CheckMusic(musicID)
+		Else
+			Message("No Music has been set in GUE. Skipping.", 1)
+		EndIf
+		
+		;Read Repeat Time
+		ReadInt(F)
+		
+		;Read Volume
+		ReadByte(F)
+	
+	Next
+	
+	;Check to make sure we read the whole file
+	If Eof(F)
+		Message("Finished Reading Client Zone File!", 1)
+	Else
+		Message("Could Not Finish Reading Client Zone Data!", 2)
+	EndIf
+	
+	;Report number of errors
+	Message("", 1)
+	If fileErrors% = 0
+		Message("0 Errors Found In: " + file$, 1)
+	Else
+		Message("" + fileErrors% + " Errors Found In: " + file$, 2)
+	EndIf
+	
+	;Reset file errors
+	fileErrors% = 0
+
+	;Close file
+	CloseFile(f)
+	
+	;Update Progress Bar
+	updatePBarZone(7)
+
+		
+End Function
+
+;Scans a Single Server Zone File
+Function ScanServerZone(file$)
+
+	;Set Errors to 0
+	fileErrors% = 0
+	
+	;Starting Scan
+	Message("", 1)
+	Message("TASK: Scan Server Area Data: " + StripFilePath(file$), 1)
+	Message("Starting Scan: " + file$, 1)
+	
+	;Attempt to read Zone file
+	F = ReadFile(file$)
+	If F = 0
+		Message("Could Not Open Zone: " + file$, 2)
+	Else
+		Message("Successfully Opened Zone: " + file$, 1)
+	EndIf
+
+	;Read Weather variables
+	Message("Attempting to read Weather Variables... ", 1)
+
+	;Read Probability of Rain
+	pRain = ReadByte(F)
+	If pRain > 255 Or pRain < 0 Then Message("Probability of Rain Value is out of range (0-255): " + pRain, 2)
+	
+	;Read Probability of Snow
+	pSnow = ReadByte(F)
+	If pSnow > 255 Or pSnow < 0 Then Message("Probability of Snow Value is out of range (0-255): " + pSnow, 2)
+
+	;Read Probability of Fog
+	pFog = ReadByte(F)
+	If pFog > 255 Or pFog < 0 Then Message("Probability of Fog Value is out of range (0-255): " + pFog, 2)
+
+	;Read Probability of Storm
+	pStorm = ReadByte(F)
+	If pStorm > 255 Or pStorm < 0 Then Message("Probability of Storm Value is out of range (0-255): " + pStorm, 2)
+
+	;Read Probability of Wind
+	pWind = ReadByte(F)
+	If pWind > 255 Or pWind < 0 Then Message("Probability of Wind Value is out of range (0-255): " + pWind, 2)
+	
+	;Finished Reading Weather
+	Message("Successfully Finished Reading Weather Variables.", 1)
+
+	;Zone Entry and Exit Scripts
+	Message("Attempting to read Zone Entry/Exit Scripts...", 1)
+	zEntry$ = ReadString(F)
+	If zEntry$ = ""
+		Message("No Zone Entry Script has been set in GUE. Skipping.", 1)
+	Else
+		Message("Checking for Zone Entry Script: " + zEntry + ".rsl", 1)
+		ScriptExists(zEntry$)
+	EndIf
+	zExit$ =  ReadString(F)
+	If zExit$ = ""
+		Message("No Zone Exit Script has been set in GUE. Skipping.", 1)
+	Else
+		Message("Checking for Zone Exit Script: " + zEntry + ".rsl", 1)
+		ScriptExists(zExit$)
+	EndIf
+	
+	;Finished Zone Entry/Exit Scripts
+	Message("Successfully Finished Reading Zone Entry/Exit Scripts.", 1)
+
+
+	;PvP flag
+	Message("Attempting to read PvP Flag...", 1)
+	pvpFlag = ReadByte(F)
+	If pvpFlag < 0 Or pvpFlag > 1 Then Message("PvP Flag Value is out of range (0-1): " + pvpFlag, 2)
+	
+	;Finished PvP Flag
+	Message("Successfully Finished Reading PvP Flag: " + pvpFlag, 1)
+	
+	;Gravity Level
+	Message("Attempting to read Gravity Level...", 1)
+	gravityL = ReadShort(F)
+	If gravityL < -32768 Or gravityL > 32767 Then Message("Gravity Level Value is out of range (-32,768-32,767): " + pvpFlag, 2)	
+
+	;Finished PvP Flag
+	Message("Successfully Finished Reading Gravity Level: " + gravityL, 1)
+	
+	;Outdoors flag
+	Message("Attempting to read Outdoors Flag...", 1)
+	outdoorsFlag = ReadByte(F)
+	If outdoorsFlag < 0 Or outdoorsFlag > 1 Then Message("Outdoors Flag Value is out of range (0-1): " + outdoorsFlag, 2)
+	
+	;Finished Outdoors Flag
+	Message("Successfully Finished Reading Outdoors Flag: " + outdoorsFlag, 1)
+	
+	;Weather Linked Zone
+	Message("Attempting to read Weather Linked Zone...", 1)
+	wLinkedZone$ = ReadString(F)
+	If wLinkedZone$ = ""
+		Message("No Weather Linked Zone has been set in GUE. Skipping.", 1)
+	Else
+		ZoneExists(file$)
+	EndIf
+	
+	;Finished Weather Linked Zone
+	Message("Successfully Finished Reading Weather Linked Zone.", 1)
+	
+	;Update Progress Bar
+	updatePBarZone(1)
+	
+	;Triggers
+	Message("Attempting to read Triggers...", 1)
+	For i% = 0 To 149
+	
+		;Read XYZ Position And Radius
+		ReadFloat(F)
+		ReadFloat(F)
+		ReadFloat(F)
+		ReadFloat(F)
+		
+		;Read Script
+		Local scriptFile$ = ReadString(F)
+		Local scriptFunction$ = ReadString(F)
+
+		;If script exists, check for it
+		If scriptFile$ <> ""
+			Message("Checking for Trigger ID " + i% + " script: " + scriptFile$ + ".rsl", 1)
+			ScriptExists(scriptFile$)
+			Message("Script Function for Trigger ID " + i% + ": " + scriptFunction$ + ".rsl", 1)
+		EndIf
+		
+	Next
+	
+	;Finished Triggers
+	Message("Successfully Finished Reading Triggers.", 1)
+	
+	;Update Progress Bar
+	updatePBarZone(2)
+	
+	;Waypoints - not important
+	Message("Attempting to read Waypoints...", 1)
+	For i% = 0 To 1999
+		ReadFloat(F)
+		ReadFloat(F)
+		ReadFloat(F)
+		ReadShort(F)
+		ReadShort(F)
+		ReadShort(F)
+		ReadInt(F)
+	Next	
+	
+	;Finished Waypoints
+	Message("Successfully Finished Reading Waypoints.", 1)
+	
+	;Update Progress Bar
+	updatePBarZone(3)
+	
+	;Portals
+	Message("Attempting to read Portals...", 1)
+	For i% = 0 To 99
+		Local pName$ = ReadString(F)
+		Local pLinkedZone$ = ReadString(F)
+		Local pLinkedPortal$ = ReadString(F)
+		If pName$ <> ""
+			Message("Reading Portal: " + pName$, 1)
+			If pLinkedZone$ <> "" And pLinkedPortal$ <> ""
+				Message("Checking Linked Portal: " + pLinkedPortal$, 1)
+				PortalExists(pLinkedZone$, pLinkedPortal$)
+			EndIf
+			Message("Finished Reading Portal: " + pName$, 1)
+		EndIf		
+		ReadFloat(F)
+		ReadFloat(F)
+		ReadFloat(F)
+		ReadFloat(F)
+		ReadFloat(F)
+	Next
+	
+	;Finished Portals
+	Message("Successfully Finished Reading Portals.", 1)
+
+	;Update Progress Bar
+	updatePBarZone(4)
+	
+	;Actor Spawns - NEEDS WORK! (only checks scripts attached to actors exist - need to check ActorID and waypointID)
+	Message("Attempting to read Actor Spawns...", 1)
+	For i% = 0 To 999
+	
+		Local actorID = ReadShort(F)
+		Local waypointID = ReadShort(F)
+		ReadFloat(F)
+		Local spawnScript$ = ReadString(F)
+		If spawnScript$ <> ""
+			Message("Checking Spawn Script for ActorID " + actorID + " at WaypointID " + waypointID + ": " + spawnScript + ".rsl", 1)
+			ScriptExists(spawnScript$)
+			Message("Finished Checking Spawn Script for ActorID " + actorID + " at WaypointID " + waypointID + "...", 1)
+		EndIf
+		Local rightClickScript$ = ReadString(F)
+		If rightClickScript$ <> ""
+			Message("Checking Right Click Script for ActorID " + actorID + " at WaypointID " + waypointID + ": " + rightClickScript$ + ".rsl", 1)
+			ScriptExists(rightClickScript$)
+			Message("Finished Checking Right Click Script for ActorID " + actorID + " at WaypointID " + waypointID + "...", 1)
+		EndIf
+		Local deathScript$ = ReadString(F)
+		If deathScript$ <> ""
+			Message("Checking Death Script for ActorID " + actorID + " at WaypointID " + waypointID + ": " + deathScript$ + ".rsl", 1)
+			ScriptExists(deathScript$)
+			Message("Finished Checking Death Script for ActorID " + actorID + " at WaypointID " + waypointID + "...", 1)
+		EndIf
+		ReadShort(F)
+		ReadShort(F)
+		ReadFloat(F)
+	Next
+	
+	;Finished Actor Spawns
+	Message("Successfully Finished Reading Actor Spawns.", 1)
+	
+	;Update Progress Bar
+	updatePBarZone(5)
+	
+	;Water Areas - NEEDS WORK! (check damage type exists)
+	Message("Attempting to read Water Areas...", 1)
+	Local waterNum = ReadShort(F)
+	
+	For i% = 0 To waterNum
+		ReadFloat(F)
+		ReadFloat(F)
+		ReadFloat(F)
+		ReadFloat(F)
+		ReadFloat(F)
+		ReadShort(F)
+		Local wDamageType = ReadShort(F) ;Check if this exists!
+	Next
+	
+	;Finished Warer Areas
+	Message("Successfully Finished Reading Water Areas.", 1)
+	
+	;Update Progress Bar
+	updatePBarZone(6)
+	
+	;Check to make sure we read the whole file
+	If Eof(F)
+		Message("Finished Reading Server Zone File!", 1)
+	Else
+		Message("Could Not Finish Reading Server Zone Data!", 2)
+	EndIf
+	
+	;Report number of errors
+	Message("", 1)
+	If fileErrors% = 0
+		Message("0 Errors Found In: " + file$, 1)
+	Else
+		Message("" + fileErrors% + " Errors Found In: " + file$, 2)
+	EndIf
+	
+	;Reset file errors
+	fileErrors% = 0
+
+	;Close file
+	CloseFile(f)
+	
+	;Update Progress Bar
+	updatePBarZone(7)
+
+	
+End Function
+
+;Checks to see if Script File exists
+Function ScriptExists(file$)
+	
+	;Full script file path
+	Local scriptFile$ = pPath + "\Data\Server Data\Scripts\" + file$ + ".rsl"
+	
+	;See if Script can be found
+	If FileType(scriptFile$) <> 1
+		Message("Could Not Locate Script: " + scriptFile$, 2)
+	ElseIf FileType(scriptFile$) = 1
+		Message("Script Successfully Located: " + scriptFile$, 1)
+	EndIf
+	
+End Function
+
+;Checks to see if portal exists
+Function PortalExists(linkedZone$, linkedPortal$)
+
+	If FileType(pPath + "\Data\Server Data\Areas\" + linkedZone$ + ".dat") = 1
+		
+		;Attempt to read Zone file
+		Local found% = 0
+		Local F = ReadFile(pPath + "\Data\Server Data\Areas\" + linkedZone$ + ".dat")
+		If F
+			For i = 0 To 4
+				ReadByte(F)
+			Next
+			ReadString(F)
+			ReadString(F)
+			ReadByte(F)
+			ReadShort(F)
+			ReadByte(F)
+			ReadString(F)
+			For i = 0 To 149
+				ReadFloat(F)
+				ReadFloat(F)
+				ReadFloat(F)
+				ReadFloat(F)
+				ReadString(F)
+				ReadString(F)
+			Next
+			For i = 0 To 1999
+				ReadFloat(F)
+				ReadFloat(F)
+				ReadFloat(F)
+				ReadShort(F)
+				ReadShort(F)
+				ReadShort(F)
+				ReadInt(F)
+			Next
+			For i = 0 To 99
+				Local pName$ = ReadString(F)
+				If pName$ = linkedPortal$
+					found = 1
+				EndIf
+				ReadString(F)
+				ReadString(F)
+				ReadFloat(F)
+				ReadFloat(F)
+				ReadFloat(F)
+				ReadFloat(F)
+				ReadFloat(F)
+			Next
+		EndIf
+		CloseFile(F)
+		If found = 1
+			Message("Portal " + linkedPortal$ + " successfully found in: " + pPath + "\Data\Server Data\Areas\" + linkedZone$ + ".dat", 1)
+		ElseIf found = 0
+			Message("Portal " + linkedPortal$ + " could not be found in: " + pPath + "\Data\Server Data\Areas\" + linkedZone$ + ".dat", 2)
+		EndIf
+	Else
+		Message("Could not check for Portal because Zone could not be found at: " + pPath + "\Data\Server Data\Areas\" + linkedZone$ + ".dat", 2)
+	EndIf
+End Function 
+
+;Checks to see if Zone file Exists
+Function ZoneExists(file$)
+	
+	file$ = StripFilePath(file$)
+	
+	;Full Zones Paths
+	Local zoneClientFile$ = pPath + "\Data\Areas\" + file$
+	Local zoneServerFile$ = pPath + "\Data\Server Data\Areas\" + file$
+	
+	;See if Zone can be found
+	If FileType(zoneClientFile$) <> 1
+		Message("Could Not Locate Zone: " + zoneClientFile$, 2)
+	ElseIf FileType(zoneClientFile$) = 1
+		Message("Zone Successfully Located: " + zoneClientFile$, 1)
+	EndIf
+	If FileType(zoneServerFile$) <> 1
+		Message("Could Not Locate Zone: " + zoneServerFile$, 2)
+	ElseIf FileType(zoneServerFile$) = 1
+		Message("Zone Successfully Located: " + zoneServerFile$, 1)
+	EndIf
+	
+End Function
+
+;Gets the handle for a given texture (this will load it if it isn't present)
+Function CheckTexture(ID)
+		
+	;Read in filename and other data from index file
+	Local f = OpenFile(pPath$ + "\Data\Game Data\Textures.dat")
+	If f = 0 
+		Message("Could Not Open: " + pPath$ + "\Data\Game Data\Textures.dat", 2)
+	EndIf
+		
+	;Find data address in file index
+	SeekFile(f, ID * 4)
+	Local DataAddress = ReadInt(f)
+	If DataAddress = 0
+		Message("Data Adress Could Not Be Found At: " + pPath$ + "\Data\Game Data\Textures.dat", 2)
+		CloseFile(f)
+	EndIf
+	
+	;Read in texture data
+	SeekFile(f, DataAddress)
+	Local Flags = ReadShort(f)
+	Local Name$ = ReadString$(f)
+	Local TexturePath$ = "\Data\Textures\" + Name$
+	
+	;See if Texture can be found
+	If FileType(pPath + TexturePath$) <> 1
+		Message("Could Not Locate Texture: " + pPath + TexturePath$, 2)
+	ElseIf FileType(pPath + TexturePath$) = 1
+		Message("Texture Successfully Located: " + pPath$ + TexturePath$, 1)
+	EndIf
+	
+	;Close file
+	CloseFile(F)
+	
+End Function
+
+;Gets the name music
+Function CheckMusic(ID)
+	
+	; Open index file
+	f = OpenFile(pPath$ + "\Data\Game Data\Music.dat")
+	If f = 0
+		Message("Could Not Open: " + pPath$ + "\Data\Game Data\Music.dat", 2)
+	EndIf
+	
+	;Find data address in file index
+	SeekFile f, ID * 4
+	DataAddress = ReadInt(f)
+	If DataAddress = 0
+		Message("Data Adress Could Not Be Found At: " + pPath$ + "\Data\Game Data\Music.dat", 2)
+		CloseFile(f)
+	EndIf
+	
+	;Read in music data
+	SeekFile f, DataAddress
+	Name$ = ReadString$(f)
+	
+	;See if Music can be found
+	If FileType(pPath$ + "\Data\Music\" + Name$) <> 1
+		Message("Could Not Locate Music: " + pPath$ + "\Data\Music\" + Name$, 2)
+	ElseIf FileType(pPath$ + "\Data\Music\" + Name$) = 1
+		Message("Music Successfully Located: " + pPath$ + "\Data\Music\" + Name$, 1)
+	EndIf
+	
+	;Close file
+	CloseFile(f)
+	
+End Function
+
+; Gets the handle for a given sound (this will load it if it isn't present)
+Function CheckSound(ID)
+
+	F = OpenFile(pPath$ + "\Data\Game Data\Sounds.dat")
+	If F = 0
+		Message("Could Not Open: " + pPath$ + "\Data\Game Data\Sounds.dat", 2)
+	EndIf
+
+	
+	; Find data address in file index
+	SeekFile F, ID * 4
+	DataAddress = ReadInt(F)
+	If DataAddress = 0
+		Message("Data Adress Could Not Be Found At: " + pPath$ + "\Data\Game Data\Sounds.dat", 2)
+		CloseFile(f)
+	EndIf
+	
+	; Read in sound data
+	SeekFile F, DataAddress
+	Is3D = ReadByte(F)
+	Name$ = ReadString$(F)
+
+	;See if Music can be found
+	If FileType(pPath$ + "\Data\Sounds\" + Name$) <> 1
+		Message("Could Not Locate Sound: " + pPath$ + "\Data\Sounds\" + Name$, 2)
+	ElseIf FileType(pPath$ + "\Data\Sounds\" + Name$) = 1
+		Message("Sound Successfully Located: " + pPath$ + "\Data\Sounds\" + Name$, 1)
+	EndIf
+	
+	;Close file
+	CloseFile(f)
+	
+End Function
+
+;Gets the name and animation byte for a given mesh
+Function CheckMesh$(ID)
+
+	;Open index file 
+	F = OpenFile(pPath$ + "\Data\Game Data\Meshes.dat")
+	If F = 0 
+		Message("Could Not Open: " + pPath$ + "\Data\Game Data\Meshes.dat", 2)
+	EndIf
+
+
+	;Find data address in file index
+	SeekFile(F, ID * 4)
+	DataAddress = ReadInt(F)
+	If DataAddress = 0
+		Message("Data Adress Could Not Be Found At: " + pPath$ + "\Data\Game Data\Meshes.dat", 2)
+		CloseFile(F)
+	EndIf
+	
+	;Read in mesh data
+	SeekFile(F, DataAddress)
+	IsAnim = ReadByte(F)
+	ReadFloat#(F)
+	ReadFloat#(F)
+	ReadFloat#(F)
+	ReadFloat#(F)
+	ReadShort(F)
+	Name$ = ReadString$(F)
+
+	;See if Music can be found
+	If FileType(pPath$ + "\Data\Meshes\" + Name$) <> 1
+		Message("Could Not Locate Mesh: " + pPath$ + "\Data\Meshes\" + Name$, 2)
+	ElseIf FileType(pPath$ + "\Data\Meshes\" + Name$) = 1
+		Message("Mesh Successfully Located: " + pPath$ + "\Data\Meshes\" + Name$, 1)
+	EndIf
+
+	;Close File
+	CloseFile(F)
+	
+	Return Name$
+
+End Function
+
+;Displays Message in Debug Text Area
+Function Message(txt$, status)
+
+	AddTextAreaText(txt_debug, txt$ + Chr$(10))
+	If status = 1
+		FormatTextAreaText(txt_debug,0,96,0,0,lineNum%, 1, 2)
+	ElseIf status = 2
+		FormatTextAreaText(txt_debug,255,0,0,0,lineNum%, 1, 2)
+		fileErrors% = fileErrors% + 1
+	EndIf
+	lineNum% = lineNum% + 1
+
+End Function
+
+;Update Progress Bar for Scan Zone
+Function updatePBarZone(amount%)
+
+	UpdateProgBar(prog_Progress, amount% * 0.14)
+	If amount% = 7 Then UpdateProgBar(prog_Progress, 1.0)
+
+End Function
+
+;Strips the file path
+Function StripFilePath$(path$, ext% = True) 
+
+    Local s% = 0 
+    Local l% = Len(path$) 
+    Local p% = l% 
+    Local filename$ = "" 
+
+    While (s% < 1) And (p% > 1) 
+        s% = Instr%(path$, "\", p%) 
+        p% = (p% - 1) 
+    Wend 
+
+    If s% = 0 
+        filename$ = path$ 
+    Else 
+        filename$ = Right$(path$, (l% - s%)) 
+    EndIf 
+
+    If ext% = False 
+        l% = Instr%(filename$, ".", 0) 
+        filename$ = Left(filename$, (l% - 1)) 
+    EndIf 
+
+    Return filename$ 
+
+End Function
